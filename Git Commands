@@ -1,0 +1,5 @@
+[cd Python_Web_Apps] - change current directory
+[git add .] - adds current directory with folders, subfolders, and files
+[git commit -m "<Notifications>"] - Message/alerts for pushed updates
+[git push] - pushes live updates to Git repository
+[git pull] - used only when merging active changes made by others in Git repository. In this case, not needed since there is only one main account

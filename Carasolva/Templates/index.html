@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Carasolva User Creation</title>
+<style>
+  body { 
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; 
+    background: #121212; 
+    color: #eee; 
+    padding: 20px; 
+    margin: 0;
+  }
+  h1, h2 { color: #64ffda; }
+  form label { display: block; margin-bottom: 0.5em; }
+  input[type="text"], input[type="password"], input[type="file"] { 
+    padding: 8px; 
+    width: 320px; 
+    border: none; 
+    border-radius: 4px; 
+    margin-top: 4px; 
+    background:#1e1e1e; 
+    color:#eee; 
+  }
+  button { 
+    background-color: #64ffda; 
+    color: #121212; 
+    border: none; 
+    padding: 10px 20px; 
+    font-weight: bold; 
+    cursor: pointer; 
+    border-radius: 4px; 
+    margin-top: 10px; 
+    transition: background-color 0.3s ease; 
+  }
+  button:hover { background-color: #1de9b6; }
+  small { color:#aaa; }
+  #output { 
+    margin-top: 20px; 
+    background: #222; 
+    border-radius: 6px; 
+    padding: 15px; 
+    height: 350px; 
+    overflow-y: auto; 
+    font-family: "Courier New", Courier, monospace; 
+    font-size: 14px; 
+  }
+  .line { 
+    display: flex; 
+    align-items: center; 
+    margin-bottom: 8px; 
+    opacity: 0; 
+    animation: fadeIn 0.3s forwards; 
+  }
+  @keyframes fadeIn { to { opacity: 1; } }
+  .icon { margin-right: 10px; width: 18px; height: 18px; flex-shrink: 0; }
+  .success { color: #00e676; }
+  .error { color: #ff5252; }
+  .info { color: #64b5f6; }
+  .summary { 
+    margin-top: 16px; 
+    background: #1a1a1a; 
+    border-radius: 6px; 
+    padding: 12px; 
+  }
+  .summary h3 { margin: 6px 0 8px; color: #64ffda; }
+  .summary ul { margin: 0; padding-left: 18px; }
+  
+  /* Logo styling */
+  .logo-container {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+  }
+  .logo-container img {
+    width: 300px;
+    height: auto;
+  }
+</style>
+</head>
+<body>
+
+<!-- Logo -->
+<div class="logo-container">
+    <img src="{{ url_for('static', filename='livingresources-logo.png') }}" alt="Living Resources Logo">
+</div>
+
+<h1>Create Users</h1>
+
+<form id="userForm" enctype="multipart/form-data">
+  <label>
+    Carasolva Username:
+    <input type="text" name="username" required autocomplete="username" />
+  </label>
+  <label>
+    Carasolva Password:
+    <input type="password" name="password" required autocomplete="current-password" />
+  </label>
+  <label>
+    Spreadsheet (.xlsx/.xls/.csv):
+    <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
+  </label>
+  <label>
+    Role (dropdown text in Carasolva):
+    <input type="text" name="role" placeholder="Non Med Cert Staff" />
+    <small>Leave blank to use default.</small>
+  </label>
+  <label>
+    Edge Driver Path:
+    <input type="text" name="driver_path" value="C:\Users\Admin\Downloads\edgedriver_win64\msedgedriver.exe" />
+    <small>Override only if different on this machine.</small>
+  </label>
+  <button type="submit">Start Script</button>
+</form>
+
+<h2>Output:</h2>
+<div id="output" aria-live="polite" aria-atomic="true"></div>
+<div id="summary" class="summary" hidden></div>
+
+<script>
+  const form = document.getElementById("userForm");
+  const outputDiv = document.getElementById("output");
+  const summaryDiv = document.getElementById("summary");
+
+  const icons = {
+    success: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#00e676" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+    error: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#ff5252" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+    info: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#64b5f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="8"/></svg>`
+  };
+
+  let currentRunId = null;
+  let pollTimer = null;
+
+  form.addEventListener("submit", function(e) {
+    e.preventDefault();
+    outputDiv.innerHTML = "";
+    summaryDiv.hidden = true;
+    summaryDiv.innerHTML = "";
+
+    const formData = new FormData(form);
+
+    fetch("/start", { method: "POST", body: formData })
+      .then(async (response) => {
+        if (!response.ok) {
+          const txt = await response.text().catch(() => response.statusText);
+          addLine("Error starting script: " + txt, "error");
+          throw new Error("Start failed");
+        }
+        return response.json();
+      })
+      .then(({ run_id }) => {
+        currentRunId = run_id;
+        startStream(run_id);
+        startPolling(run_id);
+      })
+      .catch(err => addLine("Failed to start: " + (err?.message || err), "error"));
+  });
+
+  function startStream(run_id) {
+    const query = new URLSearchParams({ run_id }).toString();
+    const evtSource = new EventSource("/stream?" + query);
+    let finished = false;
+
+    evtSource.onmessage = (event) => {
+      if (event.data === "[DONE]") {
+        finished = true;
+        addLine("Script finished. Preparing summary…", "success");
+        evtSource.close();
+        fetchSummary(run_id);
+        stopPolling();
+        return;
+      }
+
+      const text = event.data;
+      const skipPatterns = [
+        "[OK] Loaded",
+        "Clicked '+' to expand Company",
+        "Clicked on 'Users' link",
+        "Expand Company",
+        "Users link",
+        "DEBUG:"
+      ];
+      if (skipPatterns.some(p => text.includes(p))) return;
+
+      if (text.startsWith("❌") || text.startsWith("[ERROR]") || text.startsWith("[FAIL]")) {
+        addLine(text, "error");
+      } else if (
+        text.toLowerCase().includes("success") ||
+        text.includes("✓") ||
+        text.includes("✅") ||
+        text.startsWith("[OK]") ||
+        text.includes("All users processed")
+      ) {
+        addLine(text, "success");
+      } else {
+        addLine(text, "info");
+      }
+    };
+
+    evtSource.onerror = () => {
+      if (!finished) addLine("…connection hiccup (summary will still load)…", "info");
+    };
+  }
+
+  function startPolling(run_id) {
+    stopPolling();
+    pollTimer = setInterval(() => fetchSummary(run_id, true), 3000);
+  }
+
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function fetchSummary(run_id, silent=false) {
+    fetch("/result?run_id=" + encodeURIComponent(run_id))
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === "done" || data.status === "error") {
+          stopPolling();
+          renderSummary(data);
+        } else if (!silent) {
+          addLine("Waiting for summary…", "info");
+        }
+      })
+      .catch(err => { if (!silent) addLine("Failed to load summary: " + (err?.message || err), "error"); });
+  }
+
+  function renderSummary(data) {
+    const { all_users = [], finished_at, status } = data;
+    const ok = status === "done";
+    const title = ok ? "✅ All user accounts created" : "⚠️ Finished with errors (see log above)";
+    const html = `
+      <h3>${title}</h3>
+      <div><strong>Finished:</strong> ${escapeHtml(finished_at || "")}</div>
+      <div style="margin-top:8px;"><strong>Accounts:</strong> (${all_users.length})</div>
+      ${all_users.length ? `<ul>${all_users.map(u => `<li>${escapeHtml(u.name)} &lt;${escapeHtml(u.email)}&gt;</li>`).join("")}</ul>` : "<div>No users found in spreadsheet.</div>"}
+    `;
+    summaryDiv.innerHTML = html;
+    summaryDiv.hidden = false;
+    addLine("Summary loaded.", ok ? "success" : "error");
+  }
+
+  function addLine(text, type = "info") {
+    const div = document.createElement("div");
+    div.classList.add("line", type);
+
+    let iconSvg = icons.info;
+    if (type === "success") iconSvg = icons.success;
+    else if (type === "error") iconSvg = icons.error;
+
+    div.innerHTML = iconSvg + escapeHtml(text);
+    outputDiv.appendChild(div);
+    outputDiv.scrollTop = outputDiv.scrollHeight;
+  }
+
+  function escapeHtml(text) {
+    const p = document.createElement("p");
+    p.textContent = text;
+    return p.innerHTML;
+  }
+</script>
+
+</body>
+</html>

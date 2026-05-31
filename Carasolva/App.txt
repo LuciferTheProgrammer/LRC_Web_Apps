@@ -1,0 +1,41 @@
+from flask import Flask, request, render_template
+import pandas as pd
+import os
+from selenium import webdriver
+from selenium.webdriver.edge.service import Service
+import time
+
+app = Flask(__name__)
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+@app.route("/", methods=["GET", "POST"])
+def upload_file():
+    if request.method == "POST":
+        file = request.files["file"]
+        filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(filepath)
+
+        # Run your Selenium script here
+        run_automation(filepath)
+
+        return "Automation Complete!"
+    return '''
+        <form method="POST" enctype="multipart/form-data">
+            <p><input type="file" name="file" required>
+            <p><input type="submit" value="Run Automation">
+        </form>
+    '''
+
+def run_automation(excel_path):
+    df = pd.read_excel(excel_path)
+    service = Service("msedgedriver.exe")
+    driver = webdriver.Edge(service=service)
+
+    # Your existing code here, loop through `df` and use Selenium
+    driver.get("https://www.google.com")
+    time.sleep(5)
+    driver.quit()
+
+if __name__ == "__main__":
+    app.run(debug=True)

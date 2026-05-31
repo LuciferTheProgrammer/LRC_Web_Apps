@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AD User Creation</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <style>
+      :root{
+        --bg:#121212;
+        --panel:#171a1f;
+        --panel-2:#1b1f26;
+        --muted:#b5c1d1;
+        --text:#e9eef5;
+        --accent:#64ffda;
+        --accent-2:#1de9b6;
+        --ok:#00e676;
+        --err:#ff5252;
+        --info:#64b5f6;
+        --input:#1e1e1e;
+        --border:#2a3240;
+        --code:#0d1117;
+      }
+      *{box-sizing:border-box}
+      html,body{height:100%}
+      body{
+        margin:0; padding:24px;
+        background: radial-gradient(1200px 600px at 10% -10%, rgba(100,255,218,.08), transparent 60%),
+                    radial-gradient(1000px 600px at 110% 10%, rgba(29,233,182,.06), transparent 55%),
+                    var(--bg);
+        color:var(--text);
+        font-family:"Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      /* Logo */
+      .logo-wrap{
+        position:fixed; top:18px; right:18px; z-index:10; opacity:.95;
+        filter: drop-shadow(0 6px 18px rgba(0,0,0,.45));
+      }
+      .logo-wrap img{ width:260px; height:auto; }
+
+      .container{
+        max-width: 980px; margin: 0 auto;
+      }
+      .card{
+        background: linear-gradient(180deg, var(--panel), var(--panel-2));
+        border:1px solid var(--border);
+        border-radius:14px;
+        padding:24px;
+        box-shadow:
+          0 10px 30px rgba(0,0,0,.35),
+          inset 0 1px 0 rgba(255,255,255,.02);
+      }
+      h1{
+        margin:0 0 6px;
+        color:var(--accent);
+        letter-spacing:.3px;
+        font-size:28px;
+      }
+      p.muted{ color:var(--muted); margin-top:0 }
+
+      .grid{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+      @media (max-width: 880px){ .grid{ grid-template-columns:1fr; } }
+
+      label{ font-weight:600; display:block; margin:10px 0 6px; }
+      input[type="text"], input[type="password"], input[type="file"]{
+        width:100%; padding:10px 12px; border-radius:8px;
+        border:1px solid var(--border); background:var(--input); color:var(--text);
+        outline:none; transition: box-shadow .2s, border-color .2s, transform .05s ease-in-out;
+      }
+      input:focus{
+        border-color:var(--accent);
+        box-shadow:0 0 0 3px rgba(100,255,218,.2);
+      }
+
+      button{
+        appearance:none; border:0; border-radius:10px; padding:12px 16px;
+        font-weight:700; letter-spacing:.2px; cursor:pointer;
+        color:#0b0f13; background:linear-gradient(135deg, var(--accent), var(--accent-2));
+        box-shadow:0 10px 20px rgba(100,255,218,.18), 0 2px 6px rgba(0,0,0,.3);
+        transition: transform .06s ease, filter .2s ease, box-shadow .2s ease;
+      }
+      button:hover{ filter:saturate(1.1) brightness(1.05); }
+      button:active{ transform: translateY(1px); }
+
+      .hint{
+        background:rgba(29,33,39,.7);
+        border:1px solid var(--border);
+        border-radius:10px; padding:12px;
+        color:var(--muted);
+      }
+
+      .ok,.err{
+        padding:12px 14px; border-radius:10px; margin:12px 0;
+        border:1px solid var(--border);
+      }
+      .ok{ background: rgba(0,230,118,.08); color:var(--ok); }
+      .err{ background: rgba(255,82,82,.08); color:var(--err); }
+
+      code{
+        background:var(--code);
+        border:1px solid var(--border);
+        color:#c9d1d9; padding:2px 6px; border-radius:6px;
+      }
+
+      ul.suggestions{ margin:8px 0 0 18px; }
+      .footer-note{ color:var(--muted); font-size:.9rem; margin-top:10px; }
+      .actions{ margin-top:14px; display:flex; gap:8px; flex-wrap:wrap; }
+      a.btn{
+        color: #0b0f13; text-decoration:none; font-weight:700;
+        background:linear-gradient(135deg, var(--accent), var(--accent-2));
+        padding:10px 12px; border-radius:10px; display:inline-block;
+        box-shadow:0 6px 16px rgba(100,255,218,.20);
+      }
+
+      iframe.download{ display:none; width:0; height:0; border:0; }
+
+      /* Toast (pop-out) */
+      .toast{
+        position: fixed;
+        top: 20px; left: 50%;
+        transform: translateX(-50%) translateY(-20px);
+        background: #1f242d;
+        color: #fff;
+        border: 1px solid var(--border);
+        box-shadow: 0 12px 28px rgba(0,0,0,.45);
+        padding: 12px 16px;
+        border-radius: 10px;
+        z-index: 9999;
+        opacity: 0;
+        max-width: 90%;
+        width: 520px;
+        text-align: center;
+        transition: opacity .25s ease, transform .25s ease;
+      }
+      .toast.show{
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      .toast.error{ border-color:#ff9191; }
+      .toast .strong { font-weight: 700; color: #ffb3b3; }
+
+      /* Field shake on bad credentials */
+      .shake{
+        animation: shake .35s ease-in-out;
+        border-color: #ff9191 !important;
+        box-shadow: 0 0 0 3px rgba(255, 82, 82, .18) !important;
+      }
+      @keyframes shake {
+        10%, 90% { transform: translateX(-1px); }
+        20%, 80% { transform: translateX(2px);  }
+        30%, 50%, 70% { transform: translateX(-4px); }
+        40%, 60% { transform: translateX(4px); }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="logo-wrap">
+      <img src="{{ url_for('static', filename='livingresources-logo.png') }}" alt="Living Resources Logo">
+    </div>
+
+    {% if toast %}
+      <div id="toast" class="toast error" role="alert" aria-live="assertive" aria-atomic="true">
+        <span class="strong">Heads up:</span> {{ toast }}
+      </div>
+    {% endif %}
+
+    <div class="container">
+      <div class="card">
+        <h1>Active Directory User Creation</h1>
+        <p class="muted">Upload a spreadsheet and enter your AD admin credentials. Multiple runs can execute concurrently.</p>
+
+        {% if error %}<div class="err">{{ error }}</div>{% endif %}
+        {% if success %}
+          <div class="ok">
+            {{ success }}
+            {% if download_url %}&nbsp;<a class="btn" href="{{ download_url }}">Download now</a>{% endif %}
+          </div>
+        {% endif %}
+
+        {% if suggestions and suggestions|length > 0 %}
+        <div class="hint">
+          <div><strong style="color:var(--accent)">Suggested OUs</strong></div>
+          <ul class="suggestions">
+            {% for s in suggestions %}<li><code>{{ s }}</code></li>{% endfor %}
+          </ul>
+          <div>Copy one DN into the <em>Target OU</em> field.</div>
+        </div>
+        {% endif %}
+
+        {% if download_url %}<iframe class="download" src="{{ download_url }}"></iframe>{% endif %}
+
+        <form method="post" action="/run" enctype="multipart/form-data" autocomplete="off">
+          <label for="file">Spreadsheet (.xlsx/.xls/.csv)</label>
+          <input id="file" name="file" type="file" accept=".xlsx,.xls,.csv" required>
+
+          <div class="grid">
+            <div>
+              <label for="admin_username">AD Admin Username</label>
+              <input id="admin_username" name="admin_username" type="text"
+                     placeholder="livingresources\jdoe or jdoe@livingresources.org or jdoe"
+                     value="{{ admin_username or '' }}" required autocomplete="username">
+            </div>
+            <div>
+              <label for="admin_password">AD Admin Password</label>
+              <input id="admin_password" name="admin_password" type="password" required autocomplete="current-password">
+            </div>
+          </div>
+
+          <div class="grid">
+            <div>
+              <label for="domain_prefix">Domain Prefix (used if username has no domain)</label>
+              <input id="domain_prefix" name="domain_prefix" type="text" value="{{ domain_prefix }}">
+            </div>
+            <div>
+              <label for="temp_ou_dn">Target OU (DN or OU name)</label>
+              <input id="temp_ou_dn" name="temp_ou_dn" type="text" value="{{ temp_ou_dn }}" required>
+            </div>
+          </div>
+
+          <div class="hint" style="margin-top:12px">
+            <div><strong>Required columns:</strong>
+              <code>First Name</code>, <code>Last Name</code>, <code>Employee ID</code>,
+              <code>Job Title</code>, <code>Department</code>, <code>Location</code>, <code>Supervisor</code>
+            </div>
+            <div class="footer-note">Server: <code>{{ ldap_server }}</code>. Passwords are not logged. Use HTTPS in production.</div>
+          </div>
+
+          <div class="actions">
+            <button type="submit">Validate & Run</button>
+            <a class="btn" href="/job/demo" style="display:none">Live Console</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        const toast = document.getElementById('toast');
+        if (toast) {
+          setTimeout(() => toast.classList.add('show'), 50);
+          setTimeout(() => toast.classList.remove('show'), 6000);
+        }
+
+        const code = "{{ toast_code or '' }}";
+        if (code === "badcred") {
+          const u = document.getElementById('admin_username');
+          const p = document.getElementById('admin_password');
+          [u, p].forEach(el => {
+            el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+          });
+          p.focus();
+          p.select && p.select();
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>AD User Creation</title>
+    <style>
+      body { font-family: system-ui, Segoe UI, Arial; margin: 2rem; }
+      .card { max-width: 760px; border: 1px solid #e0e0e0; padding: 1.5rem; border-radius: 8px; }
+      .row { margin: .75rem 0; }
+      label { display:block; font-weight:600; margin-bottom:.25rem; }
+      input[type=file], input[type=text], input[type=password] { width:100%; padding:.55rem; }
+      button { padding:.6rem 1rem; cursor:pointer; }
+      .muted { color:#666; font-size:.9rem; }
+      .hint { background:#f7f7f7; padding:.75rem; border-radius:6px; }
+      .err { background:#ffecec; color:#8a1f1f; border:1px solid #f5c2c2; padding:.75rem; border-radius:6px; margin-bottom:1rem; }
+      code { background:#f1f1f1; padding:.15rem .3rem; border-radius:4px; }
+      .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>Active Directory User Creation</h2>
+      <p class="muted">Upload a spreadsheet and enter your AD admin credentials. The app will validate your login before making any changes.</p>
+
+      {% if error %}
+      <div class="err">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" action="/run" enctype="multipart/form-data" autocomplete="off">
+        <div class="row">
+          <label for="file">Spreadsheet (.xlsx/.xls/.csv)</label>
+          <input id="file" name="file" type="file" accept=".xlsx,.xls,.csv" required>
+        </div>
+
+        <div class="grid">
+          <div class="row">
+            <label for="admin_username">AD Admin Username</label>
+            <input id="admin_username" name="admin_username" type="text"
+                   placeholder="livingresources\jdoe or jdoe@livingresources.org or jdoe"
+                   value="{{ admin_username or '' }}" required>
+          </div>
+          <div class="row">
+            <label for="admin_password">AD Admin Password</label>
+            <input id="admin_password" name="admin_password" type="password" required>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="row">
+            <label for="domain_prefix">Domain Prefix (used if username has no domain)</label>
+            <input id="domain_prefix" name="domain_prefix" type="text"
+                   value="{{ domain_prefix }}">
+          </div>
+          <div class="row">
+            <label for="temp_ou_dn">Target OU DN for new users</label>
+            <input id="temp_ou_dn" name="temp_ou_dn" type="text"
+                   value="{{ temp_ou_dn }}" required>
+          </div>
+        </div>
+
+        <div class="row hint">
+          <div><strong>Required columns:</strong> <code>First Name</code>, <code>Last Name</code>, <code>Employee ID</code>, <code>Job Title</code>, <code>Department</code>, <code>Location</code>, <code>Supervisor</code></div>
+          <div style="margin-top:.5rem">
+            Server used: <code>{{ ldap_server }}</code>. Passwords are never logged or stored. Use HTTPS in production.
+          </div>
+        </div>
+
+        <div class="row">
+          <button type="submit">Validate & Run</button>
+        </div>
+      </form>
+    </div>
+  </body>
+</html>
