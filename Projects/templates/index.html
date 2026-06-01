@@ -1,4 +1,15 @@
 <!doctype html>
+<!--
+  index.html
+
+  This template is the main upload page for the Active Directory user creation web app.
+  It displays the form where an administrator uploads a spreadsheet, enters AD admin
+  credentials, confirms the domain prefix and target OU, and starts the backend job.
+
+  The page is rendered by Flask/Jinja, so values inside {{ ... }} and {% ... %}
+  are filled in by app.py at runtime. This sanitized version uses generic placeholder
+  text and avoids exposing real company names, domains, server names, or logo names.
+-->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -8,6 +19,11 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <style>
+      /*
+        Page styling for the AD user creation upload form.
+        These CSS variables control the dark theme, form colors, buttons, alerts,
+        and reusable layout styles used throughout this template.
+      */
       :root{
         --bg:#121212;
         --panel:#171a1f;
@@ -34,7 +50,7 @@
         font-family:"Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       }
 
-      /* Logo */
+      /* Logo container for the generic company logo shown in the top-right corner. */
       .logo-wrap{
         position:fixed; top:18px; right:18px; z-index:10; opacity:.95;
         filter: drop-shadow(0 6px 18px rgba(0,0,0,.45));
@@ -117,7 +133,7 @@
 
       iframe.download{ display:none; width:0; height:0; border:0; }
 
-      /* Toast (pop-out) */
+      /* Toast message shown when Flask redirects back with an error code, such as bad credentials. */
       .toast{
         position: fixed;
         top: 20px; left: 50%;
@@ -142,7 +158,7 @@
       .toast.error{ border-color:#ff9191; }
       .toast .strong { font-weight: 700; color: #ffb3b3; }
 
-      /* Field shake on bad credentials */
+      /* Visual shake animation used to highlight username/password fields when credential validation fails. */
       .shake{
         animation: shake .35s ease-in-out;
         border-color: #ff9191 !important;
@@ -157,21 +173,25 @@
     </style>
   </head>
   <body>
+    <!-- Displays the generic company logo loaded from the Flask static folder. -->
     <div class="logo-wrap">
-      <img src="{{ url_for('static', filename='livingresources-logo.png') }}" alt="Living Resources Logo">
+      <img src="{{ url_for('static', filename='company-logo.png') }}" alt="Company Logo">
     </div>
 
+    <!-- Optional Flask/Jinja toast shown when a validation error occurs. -->
     {% if toast %}
       <div id="toast" class="toast error" role="alert" aria-live="assertive" aria-atomic="true">
         <span class="strong">Heads up:</span> {{ toast }}
       </div>
     {% endif %}
 
+    <!-- Main page container for the AD upload form and validation messages. -->
     <div class="container">
       <div class="card">
         <h1>Active Directory User Creation</h1>
         <p class="muted">Upload a spreadsheet and enter your AD admin credentials. Multiple runs can execute concurrently.</p>
 
+        <!-- Server-side error or success messages returned by Flask, if present. -->
         {% if error %}<div class="err">{{ error }}</div>{% endif %}
         {% if success %}
           <div class="ok">
@@ -180,6 +200,7 @@
           </div>
         {% endif %}
 
+        <!-- Optional OU suggestions displayed when the entered target OU is ambiguous. -->
         {% if suggestions and suggestions|length > 0 %}
         <div class="hint">
           <div><strong style="color:var(--accent)">Suggested OUs</strong></div>
@@ -190,8 +211,10 @@
         </div>
         {% endif %}
 
+        <!-- Hidden iframe can trigger a download automatically when Flask provides a completed bundle URL. -->
         {% if download_url %}<iframe class="download" src="{{ download_url }}"></iframe>{% endif %}
 
+        <!-- Form posts the spreadsheet, admin credentials, domain prefix, and target OU to the Flask /run route. -->
         <form method="post" action="/run" enctype="multipart/form-data" autocomplete="off">
           <label for="file">Spreadsheet (.xlsx/.xls/.csv)</label>
           <input id="file" name="file" type="file" accept=".xlsx,.xls,.csv" required>
@@ -200,7 +223,7 @@
             <div>
               <label for="admin_username">AD Admin Username</label>
               <input id="admin_username" name="admin_username" type="text"
-                     placeholder="livingresources\jdoe or jdoe@livingresources.org or jdoe"
+                     placeholder="example\jdoe or jdoe@example.org or jdoe"
                      value="{{ admin_username or '' }}" required autocomplete="username">
             </div>
             <div>
@@ -237,14 +260,25 @@
     </div>
 
     <script>
+      /*
+        Small client-side helper script for displaying Flask error messages.
+
+        This script does not create users directly. It only handles front-end behavior:
+        showing the toast message, briefly animating invalid credential fields,
+        and focusing the password field when the backend reports a bad login.
+      */
+      // Immediately runs after the page loads so validation messages appear without user action.
       (function () {
+        // Finds the optional toast element rendered by Flask/Jinja.
         const toast = document.getElementById('toast');
         if (toast) {
           setTimeout(() => toast.classList.add('show'), 50);
           setTimeout(() => toast.classList.remove('show'), 6000);
         }
 
+        // Reads the backend error code so the page can highlight the correct fields.
         const code = "{{ toast_code or '' }}";
+        // If credentials were invalid, shake the username/password inputs and focus the password field.
         if (code === "badcred") {
           const u = document.getElementById('admin_username');
           const p = document.getElementById('admin_password');
