@@ -1,4 +1,3 @@
-# app.py
 import os
 import io
 import sys
@@ -25,14 +24,14 @@ from ldap3.utils.conv import escape_filter_chars
 ALLOWED_EXTS = {".xlsx", ".xls", ".csv"}
 MAX_FILE_MB = 20
 
-LDAP_SERVER = os.environ.get("LDAP_SERVER", "LR_DC2019-1.livingresources.org")
-DEFAULT_DOMAIN_PREFIX = os.environ.get("DOMAIN_PREFIX", "livingresources\\")
-DEFAULT_TEMP_OU_DN = os.environ.get("DEFAULT_TEMP_OU_DN", "OU=Temp,OU=Groups,DC=livingresources,DC=org")
-DEFAULT_TEMP_PW = os.environ.get("DEFAULT_TEMP_PW", "Hello123")
-BASE_DN_FALLBACK = os.environ.get("BASE_DN", "DC=livingresources,DC=org")
+LDAP_SERVER = os.environ.get("LDAP_SERVER", "dc01.example.local")
+DEFAULT_DOMAIN_PREFIX = os.environ.get("DOMAIN_PREFIX", "example\\")
+DEFAULT_TEMP_OU_DN = os.environ.get("DEFAULT_TEMP_OU_DN", "OU=Temp,OU=Users,DC=example,DC=local")
+DEFAULT_TEMP_PW = os.environ.get("DEFAULT_TEMP_PW", "ChangeMe123!")
+BASE_DN_FALLBACK = os.environ.get("BASE_DN", "DC=example,DC=local")
 
 # NEW: destination OU for post-move (can override via env)
-DEST_OU_DN = os.environ.get("DEST_OU_DN", "OU=Active,OU=LRC,OU=Groups,DC=livingresources,DC=org")
+DEST_OU_DN = os.environ.get("DEST_OU_DN", "OU=Active,OU=Users,DC=example,DC=local")
 
 # In-memory caches
 DOWNLOADS = {}               # token -> {data,name,ts}
@@ -49,6 +48,7 @@ app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 # Global no-cache headers
 # ---------------------------
 @app.after_request
+# Adds no-cache headers so browsers do not reuse old job pages or downloads.
 def add_no_cache(resp):
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0, proxy-revalidate, private"
     resp.headers["Pragma"] = "no-cache"
@@ -58,12 +58,14 @@ def add_no_cache(resp):
 # ---------------------------
 # Housekeeping
 # ---------------------------
+# Removes expired ZIP downloads from memory.
 def cleanup_downloads():
     now = time.time()
     for t in list(DOWNLOADS.keys()):
         if now - DOWNLOADS[t]["ts"] > DOWNLOAD_TTL_SEC:
             DOWNLOADS.pop(t, None)
 
+# Removes old job records and stops any stale worker process.
 def cleanup_jobs():
     now = time.time()
     for jid, meta in list(JOBS.items()):
@@ -78,20 +80,24 @@ def cleanup_jobs():
 # ---------------------------
 # LDAP helpers (no pyad here)
 # ---------------------------
+# Builds a domain-qualified username when the user enters only a short username.
 def build_full_username(username, domain_prefix):
     u = (username or "").strip()
     if "\\" in u or "@" in u:
         return u
     return f"{domain_prefix}{u}" if domain_prefix else u
 
+# Tests whether the supplied admin credentials can bind to LDAP.
 def test_bind(ldap_server, full_username, password):
     srv = Server(ldap_server, get_info=ALL)
     return Connection(srv, full_username, password, auto_bind=True)
 
+# Creates and returns an authenticated LDAP connection.
 def connect_ldap(ldap_server, full_username, password):
     srv = Server(ldap_server, get_info=ALL)
     return Connection(srv, full_username, password, auto_bind=True)
 
+# Builds a fallback base DN from the LDAP server hostname.
 def derive_dn_from_server(ldap_server: str) -> str:
     host = (ldap_server or "").split(":")[0]
     parts = host.split(".")
@@ -100,6 +106,7 @@ def derive_dn_from_server(ldap_server: str) -> str:
         return ",".join(f"DC={p}" for p in domain)
     return BASE_DN_FALLBACK
 
+# Finds the AD base DN using configured fallback values or LDAP root data.
 def get_base_dn(conn: Connection, ldap_server: str) -> str:
     if BASE_DN_FALLBACK and BASE_DN_FALLBACK.strip().lower().startswith("dc="):
         return BASE_DN_FALLBACK
@@ -132,8 +139,9 @@ def get_base_dn(conn: Connection, ldap_server: str) -> str:
         return derive_dn_from_server(ldap_server)
     except Exception:
         pass
-    return "DC=livingresources,DC=org"
+    return "DC=example,DC=local"
 
+# Resolves a typed OU name or full distinguished name into an actual OU DN.
 def resolve_ou_dn(user_input, ldap_server, full_username, password):
     user_input = (user_input or "").strip()
     try:
@@ -170,6 +178,7 @@ def resolve_ou_dn(user_input, ldap_server, full_username, password):
 # ---------------------------
 # Worker management
 # ---------------------------
+# Starts worker.py as a background process and returns the process plus output queue.
 def start_worker(job_json_path, out_dir):
     worker_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker.py")
     q = Queue()
@@ -190,6 +199,7 @@ def start_worker(job_json_path, out_dir):
         errors="replace"                       # never die on odd bytes
     )
 
+    # Reads worker stdout and stores each line in the queue for live streaming.
     def _reader():
         try:
             for line in proc.stdout:
@@ -214,6 +224,7 @@ def start_worker(job_json_path, out_dir):
 # Routes
 # ---------------------------
 @app.get("/")
+# Renders the main upload page and displays any validation message.
 def index():
     cleanup_downloads(); cleanup_jobs()
 
@@ -244,6 +255,7 @@ def index():
     )
 
 @app.post("/run")
+# Validates the form, saves the spreadsheet, creates a job file, and starts the worker.
 def run():
     cleanup_downloads(); cleanup_jobs()
 
@@ -307,6 +319,7 @@ def run():
         "token": None
     }
 
+    # Waits for the worker process to finish and stores the return code.
     def _waiter(jid):
         p = JOBS[jid]["proc"]
         rc = p.wait()
@@ -317,6 +330,7 @@ def run():
     return redirect(url_for("job_page", job_id=job_id))
 
 @app.get("/job/<job_id>")
+# Renders the live job console page for a specific job.
 def job_page(job_id):
     cleanup_downloads(); cleanup_jobs()
     if job_id not in JOBS:
@@ -324,6 +338,7 @@ def job_page(job_id):
     return render_template("job.html", job_id=job_id)
 
 @app.get("/stream/<job_id>")
+# Streams job output to the browser using Server-Sent Events.
 def stream(job_id):
     cleanup_jobs()
     meta = JOBS.get(job_id)
@@ -331,6 +346,7 @@ def stream(job_id):
         abort(404)
     q = meta["queue"]
 
+    # Yields queued log lines and keep-alive messages for the SSE stream.
     def gen():
         while True:
             try:
@@ -350,6 +366,7 @@ def stream(job_id):
     return resp
 
 @app.get("/result/<job_id>")
+# Returns the final job result and prepares the ZIP download bundle.
 def result(job_id):
     cleanup_downloads(); cleanup_jobs()
     meta = JOBS.get(job_id)
@@ -423,6 +440,7 @@ def result(job_id):
     }
 
 @app.get("/download/<token>")
+# Sends the generated ZIP file to the browser.
 def download(token):
     cleanup_downloads()
     meta = DOWNLOADS.get(token)
