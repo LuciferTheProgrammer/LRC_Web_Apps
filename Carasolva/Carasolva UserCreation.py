@@ -1,11 +1,24 @@
 # Carasolva_UserCreation.py
-# Usage:
-#   python Carasolva_UserCreation.py <username> <password> --file "C:\path\to\users.xlsx" --role "Non Med Cert Staff" --driver "C:\path\to\msedgedriver.exe"
+# -----------------------------------------------------------------------------
+# This file is the Selenium backend automation script for the Carasolva user
+# creation web app.
+#
+# The Flask app calls this script as a subprocess. This script reads the uploaded
+# spreadsheet, opens Microsoft Edge through Selenium, logs into the Carasolva web
+# application, searches for existing users, creates missing users, assigns the
+# selected role, and saves screenshots when errors occur.
+#
+# SECURITY / PUBLIC REPO NOTE:
+# This copy keeps the original structure and workflow but uses dummy placeholder
+# values for environment-specific items such as URLs, driver paths, default roles,
+# default passwords, and job titles. Replace placeholders only in a private/internal
+# deployment environment.
 #
 # Notes:
 # - Supports .xlsx/.xls/.csv
 # - Accepts flexible headers for first/last/email/employee id
-# - Keeps your original log format ([OK], [ERROR], [WARN], [FAIL])
+# - Keeps the original log format ([OK], [ERROR], [WARN], [FAIL])
+# -----------------------------------------------------------------------------
 
 import argparse
 import os
@@ -29,6 +42,8 @@ from selenium.common.exceptions import (
 # ----------------------------
 # Args
 # ----------------------------
+# Defines and reads the command-line arguments passed in by the Flask app.
+# These arguments include credentials, the spreadsheet path, role text, driver path, and optional pause behavior.
 def parse_args():
     p = argparse.ArgumentParser(
         description="Create Carasolva users from a spreadsheet (.xlsx/.xls/.csv)."
@@ -42,12 +57,14 @@ def parse_args():
     )
     p.add_argument(
         "--driver",
-        default=r"C:\Users\kjcalkins\Downloads\edgedriver_win64\msedgedriver.exe",
+        # Placeholder driver path for public repo; use the real local path only in private deployment.
+        default=r"C:\Path\To\msedgedriver.exe",
         help="Path to msedgedriver.exe",
     )
     p.add_argument(
         "--role",
-        default="Non Med Cert Staff",
+        # Placeholder role name for public repo; replace with the real role in private deployment.
+        default="Example Role",
         help="Role to assign (visible text in the dropdown)",
     )
     p.add_argument(
@@ -60,6 +77,8 @@ def parse_args():
 # ----------------------------
 # Flexible file reader
 # ----------------------------
+# Reads the uploaded spreadsheet and normalizes the required columns.
+# The function accepts flexible header names and returns a clean DataFrame used by the Selenium loop.
 def read_users_table(path):
     if not os.path.isfile(path):
         print(f"[ERROR] File not found: {path}")
@@ -99,6 +118,8 @@ def read_users_table(path):
     EMAIL_CANDS = {"email", "e-mail", "email address", "mail"}
     EMP_CANDS = {"employee id", "employee number", "emp id", "emp number", "employeeid"}
 
+    # Finds the first spreadsheet column that matches one of the accepted header names.
+    # This allows the input file to use common variations such as "Email", "E-mail", or "Email Address".
     def choose(colset):
         for c in df.columns:
             if c in colset:
@@ -148,6 +169,8 @@ def read_users_table(path):
 # ----------------------------
 # Selenium helpers
 # ----------------------------
+# Safely fills a web form field by element ID with retry logic.
+# The retries help handle slow-loading or temporarily stale Carasolva page elements.
 def fill_field(driver, field_id, value, label="Field"):
     for attempt in range(3):
         try:
@@ -166,6 +189,8 @@ def fill_field(driver, field_id, value, label="Field"):
     print(f"[FAIL] Failed to fill {label} after retries.")
     return False
 
+# Main Selenium automation workflow.
+# It reads arguments, loads the spreadsheet, opens Edge, logs into the target web app, and processes each user.
 def main():
     args = parse_args()
 
@@ -191,7 +216,8 @@ def main():
 
     try:
         # Login
-        driver.get("https://carasolva-medsupport-prod.azurewebsites.net/Masters/UserLogin.aspx")
+        # Placeholder login URL for public repo; replace with the real internal/vendor URL in private deployment.
+        driver.get("https://example-carasolva-app.example.com/Masters/UserLogin.aspx")
         WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "txtUserName")))
         driver.find_element(By.ID, "txtUserName").send_keys(username)
         driver.find_element(By.ID, "txtPassword").send_keys(password + Keys.RETURN)
@@ -280,9 +306,11 @@ def main():
                 else:
                     print("[WARN] Employee ID missing/blank; skipping SSO/Employee Number.")
 
-                fill_field(driver, "ctl00_DefaultContent_txtPassword", "A12345", "Password")
-                fill_field(driver, "ctl00_DefaultContent_txtConfirmPassword", "A12345", "Confirm Password")
-                fill_field(driver, "ctl00_DefaultContent_uscPersonControl_txtTitle", "DSP", "Title")
+                # Placeholder default account password for public repo; replace only in private deployment.
+                fill_field(driver, "ctl00_DefaultContent_txtPassword", "ExampleTempPassword123!", "Password")
+                fill_field(driver, "ctl00_DefaultContent_txtConfirmPassword", "ExampleTempPassword123!", "Confirm Password")
+                # Placeholder job title for public repo; replace with real business title only in private deployment.
+                fill_field(driver, "ctl00_DefaultContent_uscPersonControl_txtTitle", "Example Job Title", "Title")
 
                 # Role
                 try:
