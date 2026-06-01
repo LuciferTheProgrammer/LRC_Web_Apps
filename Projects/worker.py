@@ -1,3 +1,38 @@
+# worker.py
+# -----------------------------------------------------------------------------
+# Active Directory User Creation Backend Worker
+#
+# This file is the backend worker process launched by the Flask web app in
+# app.py. It is normally not started directly by the end user. The Flask app
+# saves the uploaded spreadsheet, creates a job JSON file, and then starts this
+# worker as a subprocess with that job file as input.
+#
+# The worker reads the spreadsheet, connects to Active Directory, creates user
+# accounts, fills in attributes, resolves supervisors, adds users to default
+# groups, runs PowerShell post-processing, and writes output files such as
+# summary.xlsx, run_log.txt, created_users.json, post_process.ps1, and
+# AssignOffice365E1.ps1.
+#
+# SECURITY / PUBLIC REPO NOTE:
+# This copy keeps the same code structure and workflow, but uses dummy placeholder
+# values for company-specific information such as AD domains, email domains,
+# group distinguished names, OU paths, company names, temporary passwords, and
+# licensing examples. Replace placeholders only in a private/internal deployment
+# environment.
+#
+# Input:
+# - A job.json file created by app.py
+# - A spreadsheet containing required user columns
+#
+# Output:
+# - summary.xlsx for processed user accounts
+# - run_log.txt for job logs
+# - ERROR.txt if the job fails
+# - created_users.json for newly created user DNs
+# - post_process.ps1 for AD post-processing
+# - AssignOffice365E1.ps1 for follow-up license assignment
+# -----------------------------------------------------------------------------
+
 import os
 import io
 import sys
