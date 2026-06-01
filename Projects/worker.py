@@ -1,4 +1,3 @@
-# worker.py
 import os
 import io
 import sys
@@ -27,10 +26,12 @@ except Exception:
 # ---------------------------
 # LDAP helpers
 # ---------------------------
+# Creates and returns an authenticated LDAP connection.
 def connect_ldap(ldap_server, full_username, password):
     srv = Server(ldap_server, get_info=ALL)
     return Connection(srv, full_username, password, auto_bind=True)
 
+# Builds a fallback base DN from the LDAP server hostname.
 def derive_dn_from_server(ldap_server: str, fallback: str) -> str:
     host = (ldap_server or "").split(":")[0]
     parts = host.split(".")
@@ -39,6 +40,7 @@ def derive_dn_from_server(ldap_server: str, fallback: str) -> str:
         return ",".join(f"DC={p}" for p in domain)
     return fallback
 
+# Finds the AD base DN using configured fallback values or LDAP root data.
 def get_base_dn(conn: Connection, ldap_server: str, fallback: str) -> str:
     if fallback and fallback.strip().lower().startswith("dc="):
         return fallback
@@ -71,8 +73,9 @@ def get_base_dn(conn: Connection, ldap_server: str, fallback: str) -> str:
         return derive_dn_from_server(ldap_server, fallback)
     except Exception:
         pass
-    return fallback or "DC=livingresources,DC=org"
+    return fallback or "DC=example,DC=local"
 
+# Finds a supervisor DN from DOMAIN\user, UPN, or sAMAccountName.
 def resolve_user_dn_by_account(account, ldap_server, full_username, password, base_fallback, logger):
     """Resolve DN from DOMAIN\\user, user@domain, or sAMAccountName."""
     if not account:
@@ -119,6 +122,7 @@ def resolve_user_dn_by_account(account, ldap_server, full_username, password, ba
         except Exception:
             pass
 
+# Finds a supervisor DN by guessing common sAMAccountName formats from First Last.
 def get_supervisor_dn(supervisor, ldap_server, full_username, password, base_fallback, logger):
     """Fallback: infer sAM from 'First Last' -> FirstLast / FLast."""
     if not supervisor:
@@ -159,6 +163,7 @@ def get_supervisor_dn(supervisor, ldap_server, full_username, password, base_fal
         except Exception:
             pass
 
+# Reads the uploaded spreadsheet or CSV into a pandas DataFrame.
 def read_input_dataframe(path):
     ext = os.path.splitext(path)[1].lower()
     if ext == ".csv":
@@ -168,13 +173,14 @@ def read_input_dataframe(path):
 # ---------------------------
 # Post-processing via PowerShell
 # ---------------------------
+# Runs generated PowerShell post-processing for newly created AD users.
 def run_post_powershell(created_dns, full_username, password, dest_ou_dn, out_dir, logger, ldap_server):
     """
     Post-steps for ONLY newly created users (mirror original standalone script):
       - proxyAddresses primary = "SMTP:" + userPrincipalName
-      - add alias "smtp:" + GivenName + "." + Surname + "@livingresources.org"
+      - add alias "smtp:" + GivenName + "." + Surname + "@example.org"
       - mail + networkid = userPrincipalName
-      - company = "Corp"
+      - company = "ExampleCompany"
       - Move-ADObject to dest_ou_dn
     Always target the same DC used by creation to avoid replication issues.
     """
@@ -229,8 +235,8 @@ foreach($u in $users){
     $primary = "SMTP:" + $usr.userPrincipalName
     Set-ADUser -Server $Server -Identity $usr -Replace @{ proxyAddresses = @($primary) } -Credential $cred
 
-    # Alias smtp proxy = GivenName.Surname@livingresources.org (exactly like original)
-    $alias = "smtp:" + $usr.GivenName + "." + $usr.Surname + "@livingresources.org"
+    # Alias smtp proxy = GivenName.Surname@example.org (exactly like original)
+    $alias = "smtp:" + $usr.GivenName + "." + $usr.Surname + "@example.org"
     try{
       Set-ADUser -Server $Server -Identity $usr -Add @{ proxyAddresses = @($alias) } -Credential $cred
     } catch {
@@ -240,8 +246,8 @@ foreach($u in $users){
     # mail and networkid set to UPN
     Set-ADObject -Server $Server -Identity $usr.DistinguishedName -Replace @{ mail=$($usr.userPrincipalName); networkid=$($usr.userPrincipalName) } -Credential $cred
 
-    # company = 'Corp'
-    Set-ADObject -Server $Server -Identity $usr.DistinguishedName -Replace @{ company="Corp" } -Credential $cred
+    # company = 'ExampleCompany'
+    Set-ADObject -Server $Server -Identity $usr.DistinguishedName -Replace @{ company="ExampleCompany" } -Credential $cred
 
     # move to destination OU
     Move-ADObject -Server $Server -Identity $usr.DistinguishedName -TargetPath $DestOU -Credential $cred
@@ -280,6 +286,7 @@ Write-Output "[PS] Post-processing complete."
 # ---------------------------
 # Assign Office 365 E1 script (same filename; updated SKU + text)
 # ---------------------------
+# Writes a PowerShell script that assigns Office 365 E1 licenses from summary.xlsx.
 def write_assign_e1_script(out_dir):
     ps = r"""<#
 .DESCRIPTION
@@ -328,7 +335,7 @@ try {
 
   Connect-MgGraph -Scopes "User.ReadWrite.All","Directory.ReadWrite.All" -ErrorAction Stop -NoWelcome
 
-  # Office 365 E1 (STANDARDPACK) SKU GUID (tenant-confirmed)
+  # Office 365 E1 (STANDARDPACK) SKU GUID (example placeholder)
   $targetSkuId = [Guid]'18181a46-0d4e-45cd-891e-60aabd171b4e'
   $sku = Get-MgSubscribedSku | Where-Object { $_.SkuId -eq $targetSkuId }
   if(-not $sku){ Write-Error "Office 365 E1 not found (SkuId 18181a46-0d4e-45cd-891e-60aabd171b4e)"; PauseExit }
@@ -393,11 +400,13 @@ try {
 # ---------------------------
 # Core processing
 # ---------------------------
+# Processes spreadsheet rows, creates AD users, assigns groups, and writes output data.
 def process_users(input_path, target_ou_dn, ldap_server, full_username, password,
                   default_temp_pw, base_fallback, dest_ou_dn, out_dir, logger):
     """Returns: (summary_df, combined_log_text)"""
     pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED)
     text_log = io.StringIO()
+    # Writes a message to the saved log and live console output.
     def add_log(msg):
         text_log.write(msg + "\n")
         logger(msg)
@@ -451,7 +460,7 @@ def process_users(input_path, target_ou_dn, ldap_server, full_username, password
 
             display_name = f"{raw_fn} {raw_ln}"
             username     = fn_clean + ln_clean_for_sam
-            upn          = f"{username}@livingresources.org"
+            upn          = f"{username}@example.org"
             temp_pw      = default_temp_pw
 
             # Check existence (within target OU)
@@ -510,10 +519,10 @@ def process_users(input_path, target_ou_dn, ldap_server, full_username, password
 
                 # Default groups
                 for dn in [
-                    "CN=LIVINGRESOURCES.NIAM.USERS,OU=Security Groups,OU=Groups,DC=livingresources,DC=org",
-                    "CN=SSPR_group,CN=Users,DC=livingresources,DC=org",
-                    "CN=Phish Group,OU=Security Groups,OU=Groups,DC=livingresources,DC=org",
-                    "CN=Chrome and Edge Enforced GPO,OU=Chrome and Edge Enforced GPO,OU=Security Groups,OU=Groups,DC=livingresources,DC=org",  # <-- added/updated DN
+                    "CN=Standard.Users,OU=Security Groups,OU=Groups,DC=example,DC=local",
+                    "CN=SSPR_Group,CN=Users,DC=example,DC=local",
+                    "CN=Security Training Group,OU=Security Groups,OU=Groups,DC=example,DC=local",
+                    "CN=Browser Policy Group,OU=Security Groups,OU=Groups,DC=example,DC=local",  # <-- added/updated DN
                 ]:
                     try:
                         grp = adgroup.ADGroup.from_dn(dn)
@@ -572,6 +581,7 @@ def process_users(input_path, target_ou_dn, ldap_server, full_username, password
 # ---------------------------
 # Entrypoint
 # ---------------------------
+# Loads the job file, starts processing, writes outputs, and returns the final status.
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({"ok": False, "error": "missing job.json"}), flush=True)
@@ -587,9 +597,10 @@ def main():
     password        = job["password"]
     default_temp_pw = job["default_temp_pw"]
     out_dir         = job["out_dir"]
-    base_fallback   = job.get("base_dn_fallback") or os.environ.get("BASE_DN", "DC=livingresources,DC=org")
-    dest_ou_dn      = job.get("dest_ou_dn") or os.environ.get("DEST_OU_DN", "OU=Active,OU=LRC,OU=Groups,DC=livingresources,DC=org")
+    base_fallback   = job.get("base_dn_fallback") or os.environ.get("BASE_DN", "DC=example,DC=local")
+    dest_ou_dn      = job.get("dest_ou_dn") or os.environ.get("DEST_OU_DN", "OU=Active,OU=Users,DC=example,DC=local")
 
+    # Prints worker log messages immediately for live streaming.
     def logger(msg):
         print(msg, flush=True)
 
