@@ -1,3 +1,18 @@
+<!--
+index.html
+-------------------------------------------------------------------------------
+This template is the browser interface for the Carasolva user creation web app.
+
+The page lets a user enter Carasolva credentials, upload a spreadsheet, provide
+the role text and Microsoft Edge WebDriver path, start the automation, watch live
+output, and view a final summary. It communicates with the Flask backend through
+/start, /stream, and /result.
+
+SECURITY / PUBLIC REPO NOTE:
+This sanitized copy uses placeholder logo names, driver paths, and role values.
+Replace them with real values only in a private/internal deployment environment.
+-------------------------------------------------------------------------------
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,6 +20,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Carasolva User Creation</title>
 <style>
+  /* Main page styling for the Carasolva web form, output log, and summary panel. */
   body { 
     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; 
     background: #121212; 
@@ -82,13 +98,14 @@
 </head>
 <body>
 
-<!-- Logo -->
+<!-- Placeholder logo section. Replace the file name with the real logo only in private deployment. -->
 <div class="logo-container">
-    <img src="{{ url_for('static', filename='livingresources-logo.png') }}" alt="Living Resources Logo">
+    <img src="{{ url_for('static', filename='company-logo-placeholder.png') }}" alt="Company Logo">
 </div>
 
 <h1>Create Users</h1>
 
+<!-- Main upload form. The JavaScript sends this form to the Flask /start endpoint. -->
 <form id="userForm" enctype="multipart/form-data">
   <label>
     Carasolva Username:
@@ -104,12 +121,13 @@
   </label>
   <label>
     Role (dropdown text in Carasolva):
-    <input type="text" name="role" placeholder="Non Med Cert Staff" />
+    <input type="text" name="role" placeholder="Example Role" />
     <small>Leave blank to use default.</small>
   </label>
   <label>
     Edge Driver Path:
-    <input type="text" name="driver_path" value="C:\Users\Admin\Downloads\edgedriver_win64\msedgedriver.exe" />
+    <!-- Placeholder driver path for public repo; replace with the real local path only in private deployment. -->
+    <input type="text" name="driver_path" value="C:\Path\To\msedgedriver.exe" />
     <small>Override only if different on this machine.</small>
   </label>
   <button type="submit">Start Script</button>
@@ -120,6 +138,7 @@
 <div id="summary" class="summary" hidden></div>
 
 <script>
+  // Front-end JavaScript for starting the job, opening the live SSE stream, polling results, and rendering output.
   const form = document.getElementById("userForm");
   const outputDiv = document.getElementById("output");
   const summaryDiv = document.getElementById("summary");
@@ -133,6 +152,8 @@
   let currentRunId = null;
   let pollTimer = null;
 
+  // Handles the Start Script button.
+  // It prevents the normal form post, sends the form data with fetch(), then opens the log stream.
   form.addEventListener("submit", function(e) {
     e.preventDefault();
     outputDiv.innerHTML = "";
@@ -158,6 +179,8 @@
       .catch(err => addLine("Failed to start: " + (err?.message || err), "error"));
   });
 
+  // Opens a Server-Sent Events connection to receive live automation output for this run.
+  // Each message is categorized as success, error, or info before being displayed.
   function startStream(run_id) {
     const query = new URLSearchParams({ run_id }).toString();
     const evtSource = new EventSource("/stream?" + query);
@@ -204,11 +227,14 @@
     };
   }
 
+  // Starts periodic result polling as a backup to the live stream.
+  // This helps the summary load even if the browser's EventSource connection has a temporary issue.
   function startPolling(run_id) {
     stopPolling();
     pollTimer = setInterval(() => fetchSummary(run_id, true), 3000);
   }
 
+  // Stops the result polling timer when the job is finished or no longer needs polling.
   function stopPolling() {
     if (pollTimer) {
       clearInterval(pollTimer);
@@ -216,6 +242,7 @@
     }
   }
 
+  // Requests final job status and summary data from the Flask /result endpoint.
   function fetchSummary(run_id, silent=false) {
     fetch("/result?run_id=" + encodeURIComponent(run_id))
       .then(r => r.json())
@@ -230,6 +257,7 @@
       .catch(err => { if (!silent) addLine("Failed to load summary: " + (err?.message || err), "error"); });
   }
 
+  // Builds and displays the final summary panel after the automation completes.
   function renderSummary(data) {
     const { all_users = [], finished_at, status } = data;
     const ok = status === "done";
@@ -245,6 +273,7 @@
     addLine("Summary loaded.", ok ? "success" : "error");
   }
 
+  // Adds one formatted log line to the output box and scrolls to the newest message.
   function addLine(text, type = "info") {
     const div = document.createElement("div");
     div.classList.add("line", type);
@@ -258,6 +287,7 @@
     outputDiv.scrollTop = outputDiv.scrollHeight;
   }
 
+  // Escapes text before inserting it into the page to avoid rendering uploaded/log text as HTML.
   function escapeHtml(text) {
     const p = document.createElement("p");
     p.textContent = text;
