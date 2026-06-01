@@ -1,4 +1,16 @@
 <!doctype html>
+<!--
+  job.html
+
+  This template is the live job console page for the Active Directory user creation web app.
+  It opens a Server-Sent Events connection to the Flask backend, displays worker.py output
+  in real time, checks the final job result, and shows a download link when the ZIP bundle
+  is ready.
+
+  The page is rendered by Flask/Jinja. The {{ job_id }} value is provided by app.py and
+  identifies which backend job stream/result should be loaded. This sanitized version uses
+  generic placeholder branding and avoids real company-specific names.
+-->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -8,6 +20,11 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <style>
+      /*
+        Page styling for the live AD job console.
+        These styles control the dark theme, top navigation, log output panel,
+        success/error status boxes, download buttons, and hidden download iframe.
+      */
       :root{
         --bg:#121212; --panel:#171a1f; --panel-2:#1b1f26;
         --muted:#b5c1d1; --text:#e9eef5;
@@ -66,10 +83,12 @@
     </style>
   </head>
   <body>
+    <!-- Displays the generic company logo loaded from the Flask static folder. -->
     <div class="logo-wrap">
-      <img src="{{ url_for('static', filename='livingresources-logo.png') }}" alt="Living Resources Logo">
+      <img src="{{ url_for('static', filename='company-logo.png') }}" alt="Company Logo">
     </div>
 
+    <!-- Main console container with back button, live log area, status messages, and download actions. -->
     <div class="container">
       <div class="topbar">
         <a class="btn" href="/">← Back</a>
@@ -78,25 +97,38 @@
       <p class="muted">Streaming logs in real time. You can leave this page; your download remains available for ~10 minutes.</p>
 
       <div class="card">
+        <!-- Live worker output is appended into this preformatted log box. -->
         <pre id="log" aria-live="polite" aria-atomic="true"></pre>
+        <!-- Final success/error message is inserted here after the job finishes. -->
         <div id="status" class="status"></div>
+        <!-- Download button is inserted here after the backend creates the ZIP bundle. -->
         <div id="actions" class="actions"></div>
+        <!-- Hidden iframe is used to trigger the completed ZIP download automatically. -->
         <iframe id="dl" class="download"></iframe>
       </div>
     </div>
 
     <script>
+      /*
+        Client-side job console logic.
+
+        This script connects to the Flask SSE stream for the current job, appends each
+        log line to the page, waits for the backend "done" event, then asks the Flask
+        /result route whether the job succeeded and where the output ZIP can be downloaded.
+      */
+      // Page elements updated by the live console script.
       const logEl = document.getElementById('log');
       const statusEl = document.getElementById('status');
       const actionsEl = document.getElementById('actions');
       const dlFrame = document.getElementById('dl');
 
+      // Adds one new log line to the console and keeps the view scrolled to the newest output.
       function append(line){
         logEl.textContent += line + "\n";
         logEl.scrollTop = logEl.scrollHeight;
       }
 
-      // Live stream via SSE
+      // Opens a live Server-Sent Events connection to stream backend worker output for this job.
       const es = new EventSource("/stream/{{ job_id }}");
       es.onmessage = (e)=> append(e.data);
       es.addEventListener('done', (e)=>{
@@ -105,6 +137,7 @@
       });
       es.onerror = ()=> append("…connection hiccup (stream will finish shortly).");
 
+      // Checks the backend result endpoint after the stream finishes and displays the download link or error bundle.
       function checkResult(){
         fetch("/result/{{ job_id }}", {cache:'no-store'})
           .then(r=>r.json())
