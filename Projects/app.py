@@ -1,3 +1,33 @@
+# app.py
+# -----------------------------------------------------------------------------
+# Active Directory User Creation Flask Web App
+#
+# This file is the main browser-based web application for the Active Directory
+# user creation workflow. It displays the upload form, receives the spreadsheet
+# and administrator credentials, validates the target directory information,
+# starts the backend worker process, streams live job output to the browser, and
+# builds the final ZIP download bundle after the job finishes.
+#
+# The actual Active Directory account creation work is handled by worker.py. This
+# Flask app prepares the job, saves the uploaded spreadsheet to a temporary job
+# folder, writes job settings to a JSON file, launches worker.py as a subprocess,
+# and exposes routes for the live console, result check, and download.
+#
+# SECURITY / PUBLIC REPO NOTE:
+# This copy keeps the same code structure and workflow, but uses dummy placeholder
+# values for environment-specific information such as LDAP server names, domain
+# prefixes, OU distinguished names, base DNs, and temporary passwords. Replace
+# placeholders only in a private/internal deployment environment.
+#
+# Main routes:
+# - GET  /              renders the upload form
+# - POST /run           validates input and starts a background job
+# - GET  /job/<job_id>  displays the live job console page
+# - GET  /stream/<id>   streams worker output using Server-Sent Events
+# - GET  /result/<id>   returns final job status and prepares ZIP download
+# - GET  /download/<t>  downloads the generated ZIP bundle
+# -----------------------------------------------------------------------------
+
 import os
 import io
 import sys
